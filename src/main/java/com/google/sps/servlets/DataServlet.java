@@ -15,6 +15,10 @@
 package com.google.sps.servlets;
 
 import java.io.IOException;
+import java.lang.Process;
+import java.lang.ProcessBuilder;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -23,10 +27,20 @@ import javax.servlet.http.HttpServletResponse;
 /** Servlet that returns some example content. TODO: modify this file to handle comments data */
 @WebServlet("/data")
 public class DataServlet extends HttpServlet {
-
+  private static final Logger LOGGER = Logger.getLogger(DataServlet.class.getName());
   @Override
   public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
     response.setContentType("text/html;");
-    response.getWriter().println("<h1>Hello world!</h1>");
+    response.getWriter().println("<h1>Running MobilityData GTFS Validator</h1>");
+    LOGGER.info("Logger Name: " + LOGGER.getName());
+    ProcessBuilder processBuilder = new ProcessBuilder();
+    processBuilder.command("java", "-jar", "gtfs-validator-v1.4.0_cli.jar", "--input",
+        "sample-feed.zip", "--output", "/", "--feed_name", "feed", "--threads", "2");
+    try {
+      Process process = processBuilder.start();
+      
+    } catch (Exception e) {
+      LOGGER.log(Level.SEVERE, "GTFS validator process did not occur", e);
+    }
   }
 }
