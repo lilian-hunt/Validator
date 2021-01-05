@@ -24,9 +24,9 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-/** Servlet that returns some example content. TODO: modify this file to handle comments data */
+/** Servlet that handles file upload and calls GTFS validator */
 @WebServlet("/data")
-public class DataServlet extends HttpServlet {
+public class GTFSServlet extends HttpServlet {
   private static final Logger LOGGER = Logger.getLogger(DataServlet.class.getName());
   @Override
   public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -38,7 +38,10 @@ public class DataServlet extends HttpServlet {
         "sample-feed.zip", "--output", "/", "--feed_name", "feed", "--threads", "2");
     try {
       Process process = processBuilder.start();
-      
+      int ret = process.waitFor();
+      if (ret != 0) {
+        LOGGER.log(Level.INFO, "Issue with process. Program exited with code: " + ret);
+      }
     } catch (Exception e) {
       LOGGER.log(Level.SEVERE, "GTFS validator process did not occur", e);
     }
