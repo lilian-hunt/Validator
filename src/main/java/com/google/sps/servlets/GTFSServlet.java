@@ -14,15 +14,29 @@
 
 package com.google.sps.servlets;
 
+import com.beust.jcommander.JCommander;
+import java.io.File;
 import java.io.IOException;
 import java.lang.Process;
 import java.lang.ProcessBuilder;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import org.mobilitydata.gtfsvalidator.input.GtfsFeedName;
+import org.mobilitydata.gtfsvalidator.input.GtfsInput;
+import org.mobilitydata.gtfsvalidator.notice.NoticeContainer;
+import org.mobilitydata.gtfsvalidator.table.GtfsFeedContainer;
+import org.mobilitydata.gtfsvalidator.table.GtfsFeedLoader;
+import org.mobilitydata.gtfsvalidator.validator.ValidatorLoader;
 
 /** Servlet that handles file upload and calls GTFS validator */
 @WebServlet("/data")
@@ -37,13 +51,61 @@ public class GTFSServlet extends HttpServlet {
     processBuilder.command("java", "-jar", "gtfs-validator-v1.4.0_cli.jar", "--input",
         "sample-feed.zip", "--output", "/", "--feed_name", "feed", "--threads", "2");
     try {
-      Process process = processBuilder.start();
-      int ret = process.waitFor();
-      if (ret != 0) {
-        LOGGER.log(Level.INFO, "Issue with process. Program exited with code: " + ret);
+      Arguments args = new Arguments();
+      CliParametersAnalyzer cliParametersAnalyzer = new CliParametersAnalyzer();
+      new JCommander(args).parse(argv);
+      if (!cliParametersAnalyzer.isValid(args)) {
+        System.exit(1);
       }
+
+      ValidatorLoader validatorLoader = new ValidatorLoader();
+      GtfsFeedLoader feedLoader = new GtfsFeedLoader();
+
+      GtfsFeedName feedName = GtfsFeedName.parseString(args.getFeedName());
+      System.out.println("Feed name: " + feedName.getCountryFirstName());
+      System.out.println("Input: " + args.getInput());
+      System.out.println("URL: " + args.getUrl());
+      System.out.println("Output: " + args.getOutputBase());
+      System.out.println("Path to archive storage directory: " + args.getStorageDirectory());
+      System.out.println("Table loaders: " + feedLoader.listTableLoaders());
+      System.out.println("Validators:");
+      System.out.println(validatorLoader.listValidators());
+
+      final long startNanos = System.nanoTime();
+      // Input.
+      feedLoader.setNumThreads(args.getNumThreads());
+      NoticeContainer noticeContainer = new NoticeContainer();
+      GtfsFeedContainer feedContainer;
+      try {
+        if (args.getInput() == null) {
+          feedContainer = feedLoader.loadAndValidate(
+              GtfsInput.createFromUrl(new URL(args.getUrl()), args.getStorageDirectory()), feedName,
+              validatorLoader, noticeContainer);
+        } else {
+          feedContainer = feedLoader.loadAndValidate(GtfsInput.createFromPath(args.getInput()),
+              feedName, validatorLoader, noticeContainer);
+        }
+      } catch (IOException | URISyntaxException | InterruptedException e) {
+        e.printStackTrace();
+        return;
+      }
+
+      // Output.
+      new File(args.getOutputBase()).mkdirs();
+      try {
+        Files.write(Paths.get(args.getOutputBase(), "report.json"),
+            noticeContainer.exportJson().getBytes(StandardCharsets.UTF_8));
+      } catch (IOException exception) {
+        LOGGER.log(Level.SEVERE, "GTFS validator process did not occur", e);
+      }
+
+      final long endNanos = System.nanoTime();
+      System.out.println(
+          String.format("Validation took %.3f seconds", (endNanos - startNanos) / 1e9));
+      System.out.println(feedContainer.tableTotals());
+      
     } catch (Exception e) {
-      LOGGER.log(Level.SEVERE, "GTFS validator process did not occur", e);
+      System.out.println("Hey!");
     }
   }
 }
